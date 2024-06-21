@@ -1,0 +1,29 @@
+/* Styles CSS pour la mise en forme */
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+}
+
+.weather-card {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.weather-card h2 {
+    margin-bottom: 5px;
+}
+
+.weather-card .details {
+    font-size: 0.9em;
+    color: #666;
+}
+
+#weatherContainer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 1em;
+}

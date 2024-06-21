@@ -9,6 +9,7 @@ const producer = new Producer(client);
 
 // Topic sur lequel envoyer les messages
 const kafkaTopic = 'weather-data';
+const numPartitions = 10;
 
 // Fonction pour récupérer les données météo depuis l'API
 async function fetchWeatherData(): Promise<any> {
@@ -29,10 +30,12 @@ async function produceWeatherData() {
     const weatherData = await fetchWeatherData();
 
     if (weatherData) {
+        const partition = Math.floor(Math.random() * numPartitions);
         const payloads: ProduceRequest[] = [
             {
                 topic: kafkaTopic,
                 messages: JSON.stringify(weatherData),
+                partition
             },
         ];
 

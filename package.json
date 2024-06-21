@@ -7,7 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc && npm run copy-html",
-    "copy-html": "copyfiles -f src/index.html dist"
+    "copy-html": "copyfiles -f src/**/*.html src/**/*.css dist/public",
+    "start": "npm run build && node dist/server.js"
   },
   "keywords": [],
   "author": "Fredray-21",
