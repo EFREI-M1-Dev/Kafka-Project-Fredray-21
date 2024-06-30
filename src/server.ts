@@ -11,8 +11,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const kafkaHost = 'localhost:9092';
-const kafkaTopic = 'weather-data';
-const numPartitions = 10;
+const kafkaTopic = {
+    topic: 'weather-data',
+    partitions: 10,
+    replicationFactor: 1
+  }
+
+const client = new KafkaClient({ kafkaHost });
+
+client.createTopics([kafkaTopic], (error, result) => {
+    if (error) {
+        console.error('Error creating Kafka topic:', error);
+    } else {
+        console.log('Kafka topic created:', result);
+    }
+});
 
 let producers: { [key: string]: Producer } = {}; // Object pour stocker les producteurs par ville
 
@@ -35,10 +48,16 @@ const createProducer = async (city: string) => {
     if (!data) {
         return;
     }
-
     const client = new KafkaClient({ kafkaHost });
-    const producer = new Producer(client);
-    producers[data.location.name] = producer;
+
+    const producer = new Producer(client, {
+        requireAcks: 1,
+        partitionerType: 1, // Random partitioner
+    });
+
+    console.log(`Producer for ${city} created`);
+    console.log(`Data for ${city}:`, data);
+        producers[data.location.name] = producer;
 
     producer.on('error', function (err) {
         console.error(`Error producing to Kafka for ${city}:`, err);
@@ -68,12 +87,11 @@ const produceWeatherData = async (city: string) => {
         }
 
         if (producers[cityName]) {
-            const partition = Math.floor(Math.random() * numPartitions);
+            // const partition = Math.floor(Math.random() * numPartitions);
             const payloads: ProduceRequest[] = [
                 {
-                    topic: kafkaTopic,
-                    messages: JSON.stringify(weatherData),
-                    partition
+                    topic: kafkaTopic.topic,
+                    messages: JSON.stringify(weatherData)
                 },
             ];
 
@@ -101,7 +119,8 @@ const consumerGroupOptions: ConsumerGroupOptions = {
     encoding: 'utf8',
 };
 
-const consumerGroup = new ConsumerGroup(consumerGroupOptions, [kafkaTopic]);
+
+const consumerGroup = new ConsumerGroup(consumerGroupOptions, [kafkaTopic.topic]);
 
 const wss = new WebSocketServer({ port: 5500 });
 

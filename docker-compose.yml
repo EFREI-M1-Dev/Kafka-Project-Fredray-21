@@ -25,17 +25,3 @@ services:
       KAFKA_RESTART_ATTEMPTS: "10"
       KAFKA_RESTART_DELAY: "5"
       ZOOKEEPER_AUTOPURGE_PURGE_INTERVAL: "0"
-
-  create-topic:
-    image: obsidiandynamics/kafka
-    command: >
-      bash -c '
-        sleep 10 && 
-        /opt/kafka_2.12-2.3.0/bin/kafka-topics.sh 
-          --create 
-          --bootstrap-server kafka:29092 
-          --topic weather-data 
-          --partitions 10 
-          --replication-factor 1'
-    depends_on:
-      - "kafka"

@@ -4,7 +4,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Weather Dashboard</title>
-        <link rel="stylesheet"  type="text/css" href="/styles.css">
+        <link rel="stylesheet" type="text/css" href="/styles.css">
     </head>
     <body>
         <h1>Weather Dashboard</h1>
@@ -97,6 +97,7 @@
         const city = document.getElementById('city').value;
         // Envoyer la ville sélectionnée au serveur via WebSocket
         socket.send(JSON.stringify({ city }));
+        document.getElementById('city').value = '';
     });
     </script>
     </body>
