@@ -6,6 +6,8 @@ import express from 'express';
 import http from 'http';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,7 +17,7 @@ const kafkaTopic = {
     topic: 'weather-data',
     partitions: 10,
     replicationFactor: 1
-  }
+}
 
 const client = new KafkaClient({ kafkaHost });
 
@@ -57,7 +59,7 @@ const createProducer = async (city: string) => {
 
     console.log(`Producer for ${city} created`);
     console.log(`Data for ${city}:`, data);
-        producers[data.location.name] = producer;
+    producers[data.location.name] = producer;
 
     producer.on('error', function (err) {
         console.error(`Error producing to Kafka for ${city}:`, err);
@@ -80,7 +82,7 @@ const produceWeatherData = async (city: string) => {
     if (weatherData) {
 
         const cityName = weatherData.location.name;
-        
+
         if (city !== cityName) {
             producers[cityName] = producers[city];
             delete producers[city];
@@ -102,6 +104,24 @@ const produceWeatherData = async (city: string) => {
                     console.log(`Message sent for ${city}:`, data);
                 }
             });
+
+
+            // Sauvegarde des données dans la base de données
+            try {
+                await prisma.weather.create({
+                    data: {
+                        city: cityName,
+                        temperatureC: weatherData.current.temp_c,
+                        temperatureF: weatherData.current.temp_f,
+                        humidity: weatherData.current.humidity,
+                        windSpeed: weatherData.current.wind_kph,
+                        windDirection: weatherData.current.wind_dir,
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error saving data to database:', error);
+            }
         }
     }
 }
