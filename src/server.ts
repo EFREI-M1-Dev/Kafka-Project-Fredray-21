@@ -7,6 +7,7 @@ import http from 'http';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { PrismaClient } from '@prisma/client';
+import { subDays } from 'date-fns';
 const prisma = new PrismaClient();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,10 +31,11 @@ client.createTopics([kafkaTopic], (error, result) => {
 });
 
 let producers: { [key: string]: Producer } = {}; // Object pour stocker les producteurs par ville
+let producerPromises: { [key: string]: Promise<void> } = {}; // Object pour stocker les promesses de création de producteur par ville
 
 const fetchWeatherData = async (city: string): Promise<any> => {
     const cityCapitalized = city[0].toUpperCase() + city.slice(1);
-    const apiKey = '4c6c9d26537346acb8080226242106';
+    const apiKey = process.env.WEATHER_API_KEY;
     const apiUrl = `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${cityCapitalized}`;
 
     try {
@@ -45,7 +47,7 @@ const fetchWeatherData = async (city: string): Promise<any> => {
     }
 }
 
-const createProducer = async (city: string) => {
+const createProducer = async (city: string): Promise<void> => {
     const data = await fetchWeatherData(city);
     if (!data) {
         return;
@@ -57,12 +59,17 @@ const createProducer = async (city: string) => {
         partitionerType: 1, // Random partitioner
     });
 
-    console.log(`Producer for ${city} created`);
-    console.log(`Data for ${city}:`, data);
-    producers[data.location.name] = producer;
+    await new Promise<void>((resolve, reject) => {
+        producer.on('ready', () => {
+            producers[data.location.name] = producer;
+            console.log(`Producer for ${city} created`);
+            resolve();
+        });
 
-    producer.on('error', function (err) {
-        console.error(`Error producing to Kafka for ${city}:`, err);
+        producer.on('error', function (err) {
+            console.error(`Error producing to Kafka for ${city}:`, err);
+            reject(err);
+        });
     });
 }
 
@@ -76,11 +83,15 @@ const closeProducer = (city: string) => {
 }
 
 const produceWeatherData = async (city: string) => {
+    if (!producers[city] && !producerPromises[city]) {
+        producerPromises[city] = createProducer(city);
+    }
+
+    await producerPromises[city];
 
     const weatherData = await fetchWeatherData(city);
 
     if (weatherData) {
-
         const cityName = weatherData.location.name;
 
         if (city !== cityName) {
@@ -89,7 +100,6 @@ const produceWeatherData = async (city: string) => {
         }
 
         if (producers[cityName]) {
-            // const partition = Math.floor(Math.random() * numPartitions);
             const payloads: ProduceRequest[] = [
                 {
                     topic: kafkaTopic.topic,
@@ -105,7 +115,6 @@ const produceWeatherData = async (city: string) => {
                 }
             });
 
-
             // Sauvegarde des données dans la base de données
             try {
                 await prisma.weather.create({
@@ -118,7 +127,6 @@ const produceWeatherData = async (city: string) => {
                         windDirection: weatherData.current.wind_dir,
                     }
                 });
-
             } catch (error) {
                 console.error('Error saving data to database:', error);
             }
@@ -139,18 +147,17 @@ const consumerGroupOptions: ConsumerGroupOptions = {
     encoding: 'utf8',
 };
 
-
 const consumerGroup = new ConsumerGroup(consumerGroupOptions, [kafkaTopic.topic]);
 
 const wss = new WebSocketServer({ port: 5500 });
 
-wss.on('connection', function (ws) {
-    ws.on('message', function (message) {
+wss.on('connection', (ws) => {
+    ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message.toString());
 
             if (data.city && !producers[data.city]) {
-                createProducer(data.city);
+                await createProducer(data.city);
                 console.log(`City added: ${data.city}`);
             } else if (data.city && data.remove && producers[data.city]) {
                 closeProducer(data.city);
@@ -184,6 +191,33 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(express.static(__dirname + '/public'));
+
+app.get('/average-weather/:city', async (req, res) => {
+    const city = req.params.city;
+    const sevenDaysAgo = subDays(new Date(), 7);
+
+    try {
+        const averageData = await prisma.weather.aggregate({
+            _avg: {
+                temperatureC: true,
+                temperatureF: true,
+                humidity: true,
+                windSpeed: true
+            },
+            where: {
+                city,
+                timestamp: {
+                    gte: sevenDaysAgo
+                }
+            }
+        });
+
+        res.json(averageData);
+    } catch (error) {
+        console.error('Error fetching average weather data:', error);
+        res.status(500).send('Error fetching average weather data');
+    }
+});
 
 app.get('/', function (req, res) {
     res.sendFile(__dirname + '/public/index.html');
